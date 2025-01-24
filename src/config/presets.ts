@@ -12,4 +12,9 @@ export const presets = [
       { offset: 2097152, name: 'Image' },
     ],
   },
+  {
+    name: 'Run Length Encoded Bad Apple Video (TT07)',
+    baseUrl: 'http://lion.rddev.co.uk/',
+    files: [{ offset: 0, name: 'tt07-badapple640x480.bin' }],
+  },
 ];

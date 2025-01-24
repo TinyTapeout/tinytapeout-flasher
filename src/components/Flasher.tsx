@@ -28,7 +28,7 @@ export interface IReplPanelProps {
   device: TTBoardDevice;
 }
 
-const MAX_FLASH_SIZE = 8 * MB;
+const MAX_FLASH_SIZE = 16 * MB;
 const CUSTOM_FIRMWARE = 'custom';
 
 interface IFileFlashStatus {

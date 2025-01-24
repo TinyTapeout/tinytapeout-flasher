@@ -7,22 +7,79 @@ import sys
 import time
 
 import micropython
-from machine import SoftSPI
+import rp2
+from machine import Pin
 from ttboard.demoboard import DemoBoard
 from ttboard.mode import RPMode
 
+@rp2.asm_pio(out_shiftdir=0, autopull=True, pull_thresh=8, autopush=True, push_thresh=8, sideset_init=(rp2.PIO.OUT_LOW,), out_init=rp2.PIO.OUT_LOW)
+def spi_cpha0():
+    out(pins, 1)             .side(0x0)
+    in_(pins, 1)             .side(0x1)
+
+@rp2.asm_pio(out_shiftdir=0, autopull=True, pull_thresh=8, autopush=True, push_thresh=8, sideset_init=(rp2.PIO.OUT_LOW,), out_init=rp2.PIO.OUT_LOW)
+def spi_cpha1():
+    pull(ifempty)            .side(0x0)
+    out(pins, 1)             .side(0x1).delay(1)
+    in_(pins, 1)             .side(0x0)
+    
+class PIOSPI:
+
+    def __init__(self, sm_id, pin_mosi, pin_miso, pin_sck, cpha=False, cpol=False, freq=1000000):
+        assert(not(cpol))
+        if not cpha:
+            self._sm = rp2.StateMachine(sm_id, spi_cpha0, freq=2*freq, sideset_base=Pin(pin_sck), out_base=Pin(pin_mosi), in_base=Pin(pin_miso))
+        else:
+            self._sm = rp2.StateMachine(sm_id, spi_cpha1, freq=4*freq, sideset_base=Pin(pin_sck), out_base=Pin(pin_mosi), in_base=Pin(pin_miso))
+        self._sm.active(1)
+
+    @micropython.native
+    def write(self, wdata):
+        first = True
+        for b in wdata:
+            self._sm.put(b, 24)
+            if not first:
+                self._sm.get()
+            else:
+                first = False
+        self._sm.get()
+        
+    @micropython.native
+    def read(self, n, write=0):
+        wdata = bytearray(n)
+        if write != 0:
+            for i in range(n):
+                wdata[i] = write
+        return self.write_read_blocking(wdata)
+
+    @micropython.native
+    def readinto(self, rdata):
+        self._sm.put(0)
+        for i in range(len(rdata)-1):
+            self._sm.put(0)
+            rdata[i] = self._sm.get()
+        rdata[-1] = self._sm.get()
+
+    @micropython.native
+    def write_read_blocking(self, wdata):
+        rdata = bytearray(len(wdata))
+        i = -1
+        for b in wdata:
+            self._sm.put(b, 24)
+            if i >= 0:
+                rdata[i] = self._sm.get()
+            i += 1
+        rdata[i] = self._sm.get()
+        return rdata
 
 class SPIFlash:
     PAGE_SIZE = micropython.const(256)
+    SECTOR_SIZE = micropython.const(4096)
+    BLOCK_SIZE = micropython.const(65536)
 
     def __init__(self, tt):
         self.tt = tt
-        self.spi = SoftSPI(
-            sck=tt.pins.uio3.raw_pin,
-            mosi=tt.pins.uio1.raw_pin,
-            miso=tt.pins.uio2.raw_pin,
-        )
-        self.spi.init(baudrate=8_000_000, polarity=1, phase=1)
+        self.spi = PIOSPI(0, tt.pins.uio1.raw_pin, tt.pins.uio2.raw_pin, tt.pins.uio3.raw_pin, freq=10_000_000)
         self.cs = tt.pins.uio0.raw_pin
         self.cs.init(self.cs.OUT, value=1)
 
@@ -102,7 +159,7 @@ class SPIFlash:
                     break
                 chunk_data = sys.stdin.buffer.read(chunk_length)
                 end_address = addr + len(chunk_data)
-                for erase_addr in range(addr, end_address, self.PAGE_SIZE):
+                for erase_addr in range(addr, end_address, self.SECTOR_SIZE):
                    self.erase_sector(erase_addr)
                 self.program(addr, chunk_data)
                 if verify:
