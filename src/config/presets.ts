@@ -17,4 +17,9 @@ export const presets = [
     baseUrl: 'https://tt.rebel-lion.uk/',
     files: [{ offset: 0, name: 'tt07-badapple640x480.bin' }],
   },
+  {
+    name: 'Run Length Encoded Bad Apple Video with audio (ttsky25a)',
+    baseUrl: 'https://tt.rebel-lion.uk/',
+    files: [{ offset: 0, name: 'ttsky25a-badapple.bin' }],
+  },
 ];
